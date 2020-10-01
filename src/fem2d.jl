@@ -1,5 +1,5 @@
-using Plots, LinearAlgebra
-pyplot(framestyle = :box, legend = false, color = :black)
+#using Plots, LinearAlgebra
+#pyplot(framestyle = :box, legend = false, color = :black)
 
 #A node structure has an x,y position in the global space
 struct node

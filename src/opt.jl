@@ -1,5 +1,5 @@
-using LinearAlgebra, Plots, ForwardDiff, DataFrames
-pyplot(framestyle = :box, color = :black, linestyle = :auto)
+#using LinearAlgebra, Plots, ForwardDiff, DataFrames
+#pyplot(framestyle = :box, color = :black, linestyle = :auto)
 
 # Assignment 1
 
