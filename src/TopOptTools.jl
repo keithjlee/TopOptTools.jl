@@ -6,7 +6,7 @@ include("fem2d.jl")
 include("opt.jl")
 
 #Export data types
-export node, element
+export node, element, load
 
 #Export main solver functions
 export fem2d_solver, fem2d_solver_modified
