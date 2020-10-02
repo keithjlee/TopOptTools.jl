@@ -12,6 +12,6 @@ export node, element, load
 export fem2d_solver, fem2d_solver_modified
 
 #Export Topology optimization method
-export minimize_unconstrained
+export opt_unconstrained
 
 end

@@ -123,7 +123,7 @@ function gradnorm(func::Function, x::Vector)
     return norm(ForwardDiff.gradient(func, x))
 end
 
-function minimize_unconstrained(func::Function, 
+function opt_unconstrained(func::Function, 
         x_start::Array,
         descent_method,
         iter_max::Int, 
