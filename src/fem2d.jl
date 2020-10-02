@@ -2,7 +2,7 @@
 #pyplot(framestyle = :box, legend = false, color = :black)
 
 #A node structure has an x,y position in the global space
-struct node
+mutable struct node
     x::Float64 #global x coordinate of node
     y::Float64 #global y coordinate of node
     dof_x::Bool #unconstrained DOF = True; fixed = False
@@ -10,7 +10,7 @@ struct node
 end
 
 #An element structure has two nodes that define the start and end positions of the system
-struct element
+mutable struct element
     a::node #node at start
     b::node #node at end
     A::Float64 #Cross sectional area
@@ -18,7 +18,7 @@ struct element
 end
 
 #load structure indicates the node that is being loaded + global XY components of the load
-struct load
+mutable struct load
     n::node #node at load point
     x_val::Float64 #X component of force
     y_val::Float64 #Y component of force
