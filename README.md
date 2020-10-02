@@ -23,10 +23,8 @@ The intent is to slowly develop these tools into more robust, general systems th
 One optional input, `annotate`, which is default set to `true`, prints out step-by-step results of the solver. 
 
 ## Small example:
-Say we want to find the unconstrained minimum of:
-$$
-f(\vec{x}) = 25x_1^3 + sqrt(x_2) - cos(x_3pi)
-$$
+Say we want to find the unconstrained minimum of: $(\vec{x}) = 25x_1^3 + sqrt(x_2) - cos(x_3pi)$,
+
 Starting at the point $\vec{x} = [1.2, 3.0, 6.4]^T$.
 
 1. First define the express the objective function as a Julia function:
