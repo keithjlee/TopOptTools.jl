@@ -477,4 +477,34 @@ function fem2d_solver_modified(nodes, elements, loads; tol = 1e-6)
     return compliance
 end
 
+function compliance_sensitivity(nodes, elements, loads)
+
+    #Create new elements with Area = 1
+    elem_new = [element()]
+
+    #Initial geometric parameters + activity check of Degrees of Freeodm
+    lengths, angles, dof_active, dof_list, n_dof = fem_init(nodes, elements)
+    
+    ###################################################
+    ###This part replaces the stiffness_init() function
+    ###################################################
+    T = [Γ(angle) for angle in angles]
+    
+    #Stiffness Matrices
+    k_element_local = [k_localxy(elements[i], lengths[i]) for i = 1:length(elements)]
+    k_element_global = [k_globalxy(k_element_local[i], T[i]) for i = 1:length(elements)]
+    
+    #Global stiffness matrix
+    K = build_K(n_dof, dof_active, nodes, elements, k_element_global)
+
+    #Create force vector
+    F = loadvector(loads, nodes, n_dof)
+
+    ###################################################
+    #This part replaces the displacements() function
+    ###################################################
+
+
+    
+
 ########################################################################
