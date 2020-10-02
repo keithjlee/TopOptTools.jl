@@ -504,7 +504,7 @@ function compliance_sensitivity(nodes, elements, loads)
     #This part replaces the displacements() function
     ###################################################
 
-
+end
     
 
 ########################################################################
