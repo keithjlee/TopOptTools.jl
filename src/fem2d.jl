@@ -305,6 +305,7 @@ end
 function trussplotter(nodes, elements, loads; 
         nodelabels = false,
         node_label_color = :red,
+        node_label_pos = :right,
         nodesize = 3, 
         nodecolor = :black, 
         elementlabels = false,
@@ -340,7 +341,7 @@ function trussplotter(nodes, elements, loads;
     #plot element labels
     if nodelabels
         for i = 1:length(nodes)
-            annotate!((nodes[i].x, nodes[i].y, Plots.text(string(i), node_label_color)))
+            annotate!((nodes[i].x, nodes[i].y, Plots.text(string(i), node_label_color, node_label_pos)))
         end
     end
 
