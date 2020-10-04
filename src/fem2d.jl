@@ -519,35 +519,148 @@ function fem2d_solver_modified(nodes, elements, loads; tol = 1e-6)
     return compliance
 end
 
-# function compliance_sensitivity(nodes, elements, loads)
 
-#     #Create new elements with Area = 1
-#     map(x->x.A=1.0, elements)
 
-#     #All areas are replaced with 1 in the input element array
-#     #Initial geometric parameters + activity check of Degrees of Freeodm
-#     lengths, angles, dof_active, dof_list, n_dof = fem_init(nodes, elements)
+##############################################################################
+##############################################################################
+#################GRADIENT METHODS#############################################
+
+function adjoint_gradient(nodes, elements, loads)
     
-#     ###################################################
-#     ###This part replaces the stiffness_init() function
-#     ###################################################
-#     T = [Γ(angle) for angle in angles]
+    ## Initialize basic information
+    lengths, angles, dof_active, dof_list, n_dof = fem_init(nodes, elements)
     
-#     #Stiffness Matrices
-#     k_element_local = [k_localxy(elements[i], lengths[i]) for i = 1:length(elements)]
-#     k_element_global = [k_globalxy(k_element_local[i], T[i]) for i = 1:length(elements)]
+    #initialize force vector
+    Force_vector = loadvector(loads, nodes, n_dof)
     
-#     #Global stiffness matrix
-#     K = build_K(n_dof, dof_active, nodes, elements, k_element_global)
+    #Create local/global elemental stiffness matrices
+    T = [Γ(angle) for angle in angles]
+    k_element_local = [k_localxy(elements[i], lengths[i]) for i = 1:length(elements)]
+    k_element_global = [k_globalxy(k_element_local[i], T[i]) for i = 1:length(elements)]
+    
+    #Create global stiffness matrix
+    K_global = build_K(n_dof, dof_active, nodes, elements, k_element_global)
+    
+    ##############################
+    #Stiffness partial derivative matrix
+    #############################
+    K_sensitivity = []
+    for i = 1:length(elements)
+        K_temp = zeros(n_dof, n_dof)
+        #for element i, determine which nodes are connected to i, and at what end
+        n_start, n_end = start_end_node_idx(elements[i], nodes)
+        
+        #Find the index values for the active DOF in the global XY element stiffness matrix
+        idx_local_start = [1,2] .* dof_active[n_start]
+        idx_local_start = idx_local_start[idx_local_start .!= 0]
+    
+        #Find the index values for the active DOf in the global XY element stiffness matrix
+        idx_local_end = [3,4] .* dof_active[n_end]
+        idx_local_end = idx_local_end[idx_local_end .!= 0]
+        
+        #Concatenate the activated index values for the global XY element stiffness matrix
+        idx_local = vcat(idx_local_start, idx_local_end)
+        
+        #Convert the above calculated values to the index of the GLOBAL stiffness matrix
+        idx_global_start =  (n_start * 2 - 2) .+ idx_local_start
+        idx_global_end =  (n_end * 2 - 4) .+ idx_local_end
+        idx_global = vcat(idx_global_start, idx_global_end)
+        
+        #Extracted sub matrix from the global XY element stiffness matrix
+        k_extracted = k_element_global[i][idx_local, idx_local] ./ elements[i].A
+        
+        #This is the global (Full DOF, active/inactive) stiffness matrix w/r/t element i
+        K_temp[idx_global, idx_global] .+= k_extracted
+        
+        push!(K_sensitivity, K_temp)
 
-#     #Create force vector
-#     F = loadvector(loads, nodes, n_dof)
+    end 
+    
+    F_reduced = Force_vector[dof_list]
+    K_glob_reduced = K_global[dof_list, dof_list]
+    
+    disp = K_glob_reduced \ F_reduced
+    
+    K_sens_reduced = [K_sen[dof_list, dof_list] for K_sen in K_sensitivity]
+    
+    grad_adj = [- transpose(disp) * K_sen * disp for K_sen in K_sens_reduced]
+    return grad_adj
+end
+    
+function fd_gradiant(func, x_init, step)
+    n_dof = length(x_init)
+    f_init = func(x_init)
+    grad = []
+    for i = 1:n_dof
+        x_step = zeros(n_dof)
+        x_step[i] = step
+        
+        f_step = func(x_init + x_step)
+        grad_step = (f_step - f_init) / step
+        push!(grad, grad_step)
+    end
+    return grad
+end
+        
 
-#     ###################################################
-#     #This part replaces the displacements() function
-#     ###################################################
+# ##############################################################################
+# ##############################################################################
+# #################COMPLIANCE OPTIMIZER#########################################
 
+# function opt_compliance(nodes, elements, loads, area_init, V_max; 
+#     write_sol = false,
+#     x_lowerbound = 0.0,
+#     xtol = 1e-6, 
+#     ftol = 1e-4)
+
+#     n_elements = length(elements)
+
+#     #Initialize optimization model
+#     compliance_opt = Opt(:LD_MMA, n_elements)
+#     compliance_opt.lower_bounds = x_lowerbound * ones(n_elements)
+#     compliance_opt.xtol_rel = xtol
+#     compliance_opt.ftol_abs = ftol
+
+#     #sub function for the objective function
+#     function compliance_areas(ars, grad)
+#         new_elems = [element(elements[i].a, elements[i].b, ars[i], elements[i].E) for i = 1:length(ars)]
+#         compliance = fem2d_solver_modified(nodes, new_elems, loads)
+#         grad_store = adjoint_gradient(nodes, new_elems, loads)
+        
+#         if length(grad) > 0
+#             for i = 1:length(grad)
+#                 grad[i] = grad_store[i]
+#             end
+#         end
+#         return compliance
+#     end
+
+#     #add objective function to model
+#     compliance_opt.min_objective = compliance_areas
+
+#     #Volume constraint
+#     function vol_constraint(ars, grad)
+#         new_elems = [element(elements[i].a, elements[i].b, ars[i], elements[i].E) for i = 1:length(ars)]
+#         grad_store = adjoint_gradient(nodes, new_elems, loads)
+        
+#         if length(grad) > 0
+#             for i = 1:length(grad)
+#                 grad[i] = grad_store[i]
+#             end
+#         end
+#         return sum(lengths .* ars) * 12  - V_max
+#     end
+
+#     #Add constraint to model
+#     inequality_constraint!(compliance_opt, vol_constraint, 1e-6)
+
+#     #solve
+#     (minf,minx,ret) = optimize(compliance_opt, area_init)
+
+#     if write_sol
+#         numevals = compliance_opt.numevals # the number of function evaluations
+#         println("got $minf at $minx after $numevals iterations (returned $ret)")
+#     end
+
+#     return minf, minx, ret
 # end
-    
-
-########################################################################
