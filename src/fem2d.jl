@@ -303,6 +303,8 @@ function bc_plotter(nodes)
 end
 
 function trussplotter(nodes, elements, loads; 
+        nodelabels = false,
+        node_label_color = :red,
         nodesize = 3, 
         nodecolor = :black, 
         elementlabels = false,
@@ -334,6 +336,13 @@ function trussplotter(nodes, elements, loads;
         linestyle = elementstyle, 
         lw = widths,
         label = "")
+
+    #plot element labels
+    if nodelabels
+        for i = 1:length(nodes)
+            annotate!((nodes[i].x, nodes[i].y, Plots.text(string(i), node_label_color)))
+        end
+    end
 
     #plot element labels
     if elementlabels
