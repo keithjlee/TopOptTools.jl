@@ -304,6 +304,7 @@ end
 
 function trussplotter(nodes, elements, loads; 
         nodelabels = false,
+        node_marker = :circle,
         node_label_color = :red,
         node_label_pos = :right,
         nodesize = 3, 
@@ -370,6 +371,7 @@ function trussplotter(nodes, elements, loads;
     
     #plot nodes
     scatter!(nodecollector(nodes), 
+        markershape = node_marker,
         markercolor = nodecolor, 
         label = "")
     
