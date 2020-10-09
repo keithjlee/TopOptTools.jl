@@ -522,147 +522,136 @@ function fem2d_solver_modified(nodes, elements, loads; tol = 1e-6)
 end
 
 
+####################################################################
+####################################################################
+####################################################################
+####################################################################
+### Meshing Tools###################################################
 
-##############################################################################
-##############################################################################
-#################GRADIENT METHODS#############################################
-
-function adjoint_gradient(nodes, elements, loads)
+function allmesher(L, H, nx::Int, ny::Int, A, E; nodelabel = true)
+    #L = length (width) of mesh domain
+    #H = height of mesh domain
+    #nx = number of nodes in x (L) direction
+    #ny = number of nodes in y (H) direction
     
-    ## Initialize basic information
-    lengths, angles, dof_active, dof_list, n_dof = fem_init(nodes, elements)
+    x_spacing = L/(nx-1) #spacing between nodes in x direction
+    y_spacing = H/(ny-1) #spacing between nodes in y direction
     
-    #initialize force vector
-    Force_vector = loadvector(loads, nodes, n_dof)
-    
-    #Create local/global elemental stiffness matrices
-    T = [Γ(angle) for angle in angles]
-    k_element_local = [k_localxy(elements[i], lengths[i]) for i = 1:length(elements)]
-    k_element_global = [k_globalxy(k_element_local[i], T[i]) for i = 1:length(elements)]
-    
-    #Create global stiffness matrix
-    K_global = build_K(n_dof, dof_active, nodes, elements, k_element_global)
-    
-    ##############################
-    #Stiffness partial derivative matrix
-    #############################
-    K_sensitivity = []
-    for i = 1:length(elements)
-        K_temp = zeros(n_dof, n_dof)
-        #for element i, determine which nodes are connected to i, and at what end
-        n_start, n_end = start_end_node_idx(elements[i], nodes)
-        
-        #Find the index values for the active DOF in the global XY element stiffness matrix
-        idx_local_start = [1,2] .* dof_active[n_start]
-        idx_local_start = idx_local_start[idx_local_start .!= 0]
-    
-        #Find the index values for the active DOf in the global XY element stiffness matrix
-        idx_local_end = [3,4] .* dof_active[n_end]
-        idx_local_end = idx_local_end[idx_local_end .!= 0]
-        
-        #Concatenate the activated index values for the global XY element stiffness matrix
-        idx_local = vcat(idx_local_start, idx_local_end)
-        
-        #Convert the above calculated values to the index of the GLOBAL stiffness matrix
-        idx_global_start =  (n_start * 2 - 2) .+ idx_local_start
-        idx_global_end =  (n_end * 2 - 4) .+ idx_local_end
-        idx_global = vcat(idx_global_start, idx_global_end)
-        
-        #Extracted sub matrix from the global XY element stiffness matrix
-        k_extracted = k_element_global[i][idx_local, idx_local] ./ elements[i].A
-        
-        #This is the global (Full DOF, active/inactive) stiffness matrix w/r/t element i
-        K_temp[idx_global, idx_global] .+= k_extracted
-        
-        push!(K_sensitivity, K_temp)
-
-    end 
-    
-    F_reduced = Force_vector[dof_list]
-    K_glob_reduced = K_global[dof_list, dof_list]
-    
-    disp = K_glob_reduced \ F_reduced
-    
-    K_sens_reduced = [K_sen[dof_list, dof_list] for K_sen in K_sensitivity]
-    
-    grad_adj = [- transpose(disp) * K_sen * disp for K_sen in K_sens_reduced]
-    return grad_adj
-end
-    
-function fd_gradiant(func, x_init, step)
-    n_dof = length(x_init)
-    f_init = func(x_init)
-    grad = []
-    for i = 1:n_dof
-        x_step = zeros(n_dof)
-        x_step[i] = step
-        
-        f_step = func(x_init + x_step)
-        grad_step = (f_step - f_init) / step
-        push!(grad, grad_step)
+    #node set
+    nodes = []
+    for x = 1:nx
+        for y = 1:ny
+            #create a node with default released DOF
+            push!(nodes, node((x-1)*x_spacing, (y-1)*y_spacing, true, true))
+        end
     end
-    return grad
+    
+    n_nodes = length(nodes)
+    node_idx = collect(1:n_nodes)
+    
+    
+    #element creation
+    
+    #This reshapes the array of nodes as a matrix where the position of the node value
+    #Has the same relative position as the actual physical system ie:
+    # node1 node3 node5
+    # node2 node4 node6
+    # for a 2x3 node system.
+    node_matrix = reverse(reshape(nodes, (ny, nx)), dims = 1)
+    node_idx_matrix = reverse(reshape(node_idx, (ny,nx)), dims = 1)
+    
+    #empty element set
+    elements = []
+    for i = 1:n_nodes-1
+        e_set = [element(nodes[i], nodes[j], A, E) for j = i+1:n_nodes]
+        push!(elements, e_set)
+    end
+    
+    elements = vcat(elements...)
+    
+    n_elements = length(elements)
+    element_idx = collect(1:n_elements)
+    
+    return nodes, elements, node_idx_matrix, element_idx
+            
+    
 end
-        
 
-# ##############################################################################
-# ##############################################################################
-# #################COMPLIANCE OPTIMIZER#########################################
-
-# function opt_compliance(nodes, elements, loads, area_init, V_max; 
-#     write_sol = false,
-#     x_lowerbound = 0.0,
-#     xtol = 1e-6, 
-#     ftol = 1e-4)
-
-#     n_elements = length(elements)
-
-#     #Initialize optimization model
-#     compliance_opt = Opt(:LD_MMA, n_elements)
-#     compliance_opt.lower_bounds = x_lowerbound * ones(n_elements)
-#     compliance_opt.xtol_rel = xtol
-#     compliance_opt.ftol_abs = ftol
-
-#     #sub function for the objective function
-#     function compliance_areas(ars, grad)
-#         new_elems = [element(elements[i].a, elements[i].b, ars[i], elements[i].E) for i = 1:length(ars)]
-#         compliance = fem2d_solver_modified(nodes, new_elems, loads)
-#         grad_store = adjoint_gradient(nodes, new_elems, loads)
-        
-#         if length(grad) > 0
-#             for i = 1:length(grad)
-#                 grad[i] = grad_store[i]
-#             end
-#         end
-#         return compliance
-#     end
-
-#     #add objective function to model
-#     compliance_opt.min_objective = compliance_areas
-
-#     #Volume constraint
-#     function vol_constraint(ars, grad)
-#         new_elems = [element(elements[i].a, elements[i].b, ars[i], elements[i].E) for i = 1:length(ars)]
-#         grad_store = adjoint_gradient(nodes, new_elems, loads)
-        
-#         if length(grad) > 0
-#             for i = 1:length(grad)
-#                 grad[i] = grad_store[i]
-#             end
-#         end
-#         return sum(lengths .* ars) * 12  - V_max
-#     end
-
-#     #Add constraint to model
-#     inequality_constraint!(compliance_opt, vol_constraint, 1e-6)
-
-#     #solve
-#     (minf,minx,ret) = optimize(compliance_opt, area_init)
-
-#     if write_sol
-#         numevals = compliance_opt.numevals # the number of function evaluations
-#         println("got $minf at $minx after $numevals iterations (returned $ret)")
-#     end
-
-#     return minf, minx, ret
-# end
+function gridmesher(L, H, nx::Int, ny::Int, A, E; nodelabel = true)
+    #L = length (width) of mesh domain
+    #H = height of mesh domain
+    #nx = number of nodes in x (L) direction
+    #ny = number of nodes in y (H) direction
+    
+    x_spacing = L/(nx-1) #spacing between nodes in x direction
+    y_spacing = H/(ny-1) #spacing between nodes in y direction
+    
+    #node set
+    nodes = []
+    for x = 1:nx
+        for y = 1:ny
+            #create a node with default released DOF
+            push!(nodes, node((x-1)*x_spacing, (y-1)*y_spacing, true, true))
+        end
+    end
+    
+    n_nodes = length(nodes)
+    node_idx = collect(1:n_nodes)
+    
+    #element creation
+    
+    #This reshapes the array of nodes as a matrix where the position of the node value
+    #Has the same relative position as the actual physical system ie:
+    # node1 node3 node5
+    # node2 node4 node6
+    # for a 2x3 node system.
+    node_matrix = reverse(reshape(nodes, (ny, nx)), dims = 1)
+    node_idx_matrix = reverse(reshape(node_idx, (ny,nx)), dims = 1)
+    
+    #empty element set
+    elements = []
+    
+    #Horizontal elements
+    for row = 1:ny
+        for col = 1:nx-1
+            e_start = node_matrix[row,col]
+            e_end = node_matrix[row,col+1]
+            push!(elements, element(e_start, e_end, A, E))
+        end
+    end
+    
+    #vertical elements
+    for col = 1:nx
+        for row = 1:ny-1
+            e_start = node_matrix[row,col]
+            e_end = node_matrix[row+1,col]
+            push!(elements, element(e_start, e_end, A, E))
+        end
+    end
+    
+    #\ diagonal elements
+    for row = 1:ny-1
+        for col = 1:nx-1
+            e_start = node_matrix[row,col]
+            e_end = node_matrix[row+1,col+1]
+            push!(elements, element(e_start, e_end, A, E))
+        end
+    end
+    
+    #/ diagonal elements
+    for row = 2:ny
+        for col = 1:nx-1
+            e_start = node_matrix[row,col]
+            e_end = node_matrix[row-1,col+1]
+            push!(elements, element(e_start, e_end, A, E))
+        end
+    end
+    
+    n_elements = length(elements)
+    element_idx = collect(1:n_elements)
+    
+            
+    return nodes, elements, node_idx_matrix, element_idx
+            
+    
+end

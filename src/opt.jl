@@ -217,6 +217,85 @@ function opt_unconstrained(func::Function,
     return output
 end
 
-##Here's a secondary test to check git connection to github.
+# Gradient computation
 
-## A third test
+function adjoint_gradient(nodes, elements, loads)
+    
+    ## Initialize basic information
+    lengths, angles, dof_active, dof_list, n_dof = fem_init(nodes, elements)
+    
+    #initialize force vector
+    Force_vector = loadvector(loads, nodes, n_dof)
+    
+    #Create local/global elemental stiffness matrices
+    T = [Γ(angle) for angle in angles]
+    k_element_local = [k_localxy(elements[i], lengths[i]) for i = 1:length(elements)]
+    k_element_global = [k_globalxy(k_element_local[i], T[i]) for i = 1:length(elements)]
+    
+    #Create global stiffness matrix
+    K_global = build_K(n_dof, dof_active, nodes, elements, k_element_global)
+    
+    ##############################
+    #Stiffness partial derivative matrix
+    #############################
+    K_sensitivity = []
+    for i = 1:length(elements)
+        K_temp = zeros(n_dof, n_dof)
+        #for element i, determine which nodes are connected to i, and at what end
+        n_start, n_end = start_end_node_idx(elements[i], nodes)
+        
+        #Find the index values for the active DOF in the global XY element stiffness matrix
+        idx_local_start = [1,2] .* dof_active[n_start]
+        idx_local_start = idx_local_start[idx_local_start .!= 0]
+    
+        #Find the index values for the active DOf in the global XY element stiffness matrix
+        idx_local_end = [3,4] .* dof_active[n_end]
+        idx_local_end = idx_local_end[idx_local_end .!= 0]
+        
+        #Concatenate the activated index values for the global XY element stiffness matrix
+        idx_local = vcat(idx_local_start, idx_local_end)
+        
+        #Convert the above calculated values to the index of the GLOBAL stiffness matrix
+        idx_global_start =  (n_start * 2 - 2) .+ idx_local_start
+        idx_global_end =  (n_end * 2 - 4) .+ idx_local_end
+        idx_global = vcat(idx_global_start, idx_global_end)
+        
+        #Extracted sub matrix from the global XY element stiffness matrix
+        k_extracted = k_element_global[i][idx_local, idx_local] ./ elements[i].A
+        
+        #This is the global (Full DOF, active/inactive) stiffness matrix w/r/t element i
+        K_temp[idx_global, idx_global] .+= k_extracted
+        
+        push!(K_sensitivity, K_temp)
+
+    end 
+    ##############################
+    #Determine Compliance
+    #############################
+    
+    F_reduced = Force_vector[dof_list]
+    K_glob_reduced = K_global[dof_list, dof_list]
+    
+    disp = K_glob_reduced \ F_reduced
+    
+    K_sens_reduced = [K_sen[dof_list, dof_list] for K_sen in K_sensitivity]
+    
+    grad_adj = [- transpose(disp) * K_sen * disp for K_sen in K_sens_reduced]
+    return grad_adj
+end
+
+function fd_gradiant(func, x_init, step)
+    n_dof = length(x_init)
+    f_init = func(x_init)
+    grad = []
+    for i = 1:n_dof
+        x_step = zeros(n_dof)
+        x_step[i] = step
+        
+        f_step = func(x_init + x_step)
+        grad_step = (f_step - f_init) / step
+        push!(grad, grad_step)
+    end
+    return grad
+end
+        
