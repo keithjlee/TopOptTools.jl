@@ -504,7 +504,7 @@ function fem2d_solver(nodes, elements, loads; tol = 1e-6)
     return new_nodes, new_elements, disp, f_axial, stress_axial, rxns, compliance
 end
 
-function fem2d_solver_modified(nodes::Array{node,1}, elements::Array{element,1}, loads; tol = 1e-6)
+function fem2d_solver_modified(nodes, elements, loads; tol = 1e-6)
     
     #Initial geometric parameters + activity check of Degrees of Freeodm
     lengths, angles, dof_active, dof_list, n_dof = fem_init(nodes, elements)
