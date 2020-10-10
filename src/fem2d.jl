@@ -12,7 +12,7 @@
 
 
 #A node structure has an x,y position in the global space
-mutable struct node
+struct node
     x::Float64 #global x coordinate of node
     y::Float64 #global y coordinate of node
     dof_x::Bool #unconstrained DOF = True; fixed = False
@@ -20,7 +20,7 @@ mutable struct node
 end
 
 #An element structure has two nodes that define the start and end positions of the system
-mutable struct element
+struct element
     a::node #node at start
     b::node #node at end
     A::Float64 #Cross sectional area
@@ -28,7 +28,7 @@ mutable struct element
 end
 
 #load structure indicates the node that is being loaded + global XY components of the load
-mutable struct load
+struct load
     n::node #node at load point
     x_val::Float64 #X component of force
     y_val::Float64 #Y component of force
@@ -504,7 +504,7 @@ function fem2d_solver(nodes, elements, loads; tol = 1e-6)
     return new_nodes, new_elements, disp, f_axial, stress_axial, rxns, compliance
 end
 
-function fem2d_solver_modified(nodes, elements, loads; tol = 1e-6)
+function fem2d_solver_modified(nodes::Array{node,1}, elements::Array{element,1}, loads; tol = 1e-6)
     
     #Initial geometric parameters + activity check of Degrees of Freeodm
     lengths, angles, dof_active, dof_list, n_dof = fem_init(nodes, elements)
