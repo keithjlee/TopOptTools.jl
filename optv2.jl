@@ -211,7 +211,7 @@ function fem_init(nodes, elements)
     return lengths, T
 end
 
-function stiffness_init(nodes, elements, lengths, T)
+function stiffness_init(nodes, elements, lengths, T, A, E)
 
     #Stiffness Matrices
     k_element_local = [k_localxy(lengths[i], A[i], E[i]) for i = 1:length(elements)]
@@ -234,7 +234,7 @@ function fem2d_solver(nodes, dofs, element_idx, A, E, loads, positions; tol = 1e
     n_dof = length(dofs)
 
     #Return global stiffness matrix (including 0 rows/columns)
-    k_global = stiffness_init(nodes, elements, lengths, T)
+    k_global = stiffness_init(nodes, elements, lengths, T, A, E)
     
     idx_expanded = e_dof_expanded.(eidx)
     
@@ -258,4 +258,48 @@ function fem2d_solver(nodes, dofs, element_idx, A, E, loads, positions; tol = 1e
     new_nodes = displaced_nodes(nodes, disp)
     
     return new_nodes, disp, f_axial, stress_axial, rxns, compliance
+end
+
+## Main solver
+function analysis(nodes, dofs, element_idx, A, E, loads, positions; tol = 1e-5)
+    
+    elements = element_maker(nodes, element_idx)
+    n_elements = length(elements)
+    lengths = [elem_length(e) for e in elements]
+    
+    T = [Γ(θ(e)) for e in elements]
+    
+    n_dof = length(dofs)
+
+    #Return global stiffness matrix (including 0 rows/columns)
+    k_global = stiffness_init(nodes, elements, lengths, T, A, E)
+    
+    idx_expanded = e_dof_expanded.(eidx)
+    
+    K = build_K(idx_expanded, k_global, n_elements)
+
+    if det(K) < 0
+        return 0
+    end
+    #Create force vector
+    F = loadmaker(loads, positions, nodes, n_dof)
+    
+    #Displacements in global coordinate system + elemental DOF displacements
+    disp, compliance = displacements(K, F, dofs, n_dof)
+    
+    disp_local = [disp[idx] for idx in idx_expanded]
+    
+    F_global, f_elemental, f_axial, stress_axial, rxns = forces(n_elements, element_idx, A, k_global, disp_local, T, n_dof)
+    
+    #If equilibrium is not reached, exit solver
+    if eq_check(rxns, F, tol) == true
+        return
+    end
+    
+    max_stress_index = findmax(abs.(stress_axial))[2]
+
+    σ_max = stress_axial[max_stress_index]
+    disp_max = findmax(disp)[1]
+    
+    return σ_max, disp_max, compliance
 end
